@@ -8,31 +8,33 @@
 
 namespace input_reader {
 
-namespace detail {
+    namespace detail {
 
-struct CommandDescription {
-    explicit operator bool() const {
-        return !command.empty();
-    }
+        std::unordered_map<std::string_view, int> ParseDistances(std::string_view str);
 
-    bool operator!() const {
-        return !operator bool();
-    }
+        struct CommandDescription {
+            explicit operator bool() const {
+                return !command.empty();
+            }
 
-    std::string command;
-    std::string id;
-    std::string description;
-};
+            bool operator!() const {
+                return !operator bool();
+            }
 
-} //detail
+            std::string command;
+            std::string id;
+            std::string description;
+        };
 
-class InputReader {
-public:
-    void ParseLine(std::string_view line);
-    void ApplyCommands(transport_catalogue::TransportCatalogue& catalogue) const;
+    } //detail
 
-private:
-    std::vector<detail::CommandDescription> commands_;
-};
+    class InputReader {
+    public:
+        void ParseLine(std::string_view line);
+        void ApplyCommands(transport_catalogue::TransportCatalogue& catalogue) const;
+
+    private:
+        std::vector<detail::CommandDescription> commands_;
+    };
 
 } //input_reader
