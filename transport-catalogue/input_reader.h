@@ -10,8 +10,6 @@ namespace input_reader {
 
     namespace detail {
 
-        std::unordered_map<std::string_view, int> ParseDistances(std::string_view str);
-
         struct CommandDescription {
             explicit operator bool() const {
                 return !command.empty();
