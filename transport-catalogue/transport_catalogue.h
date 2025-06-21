@@ -15,7 +15,6 @@ namespace transport_catalogue {
     struct Stop {
         std::string name;
         geo::Coordinates coordinates;
-        std::unordered_set<std::string_view> buses;
     };
 
     struct Bus {
@@ -26,7 +25,6 @@ namespace transport_catalogue {
 
     class TransportCatalogue {
     public:
-
         struct BusInfo {
             size_t stop_count = 0;
             size_t unique_stop_count = 0;
@@ -45,8 +43,6 @@ namespace transport_catalogue {
         std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const;
         std::optional<const std::unordered_set<std::string_view>*> GetBusesByStop(const Stop* stop) const;
 
-
-
     private:
         struct PairStopHasher {
             size_t operator()(const std::pair<const Stop*, const Stop*>& stops) const {
@@ -63,4 +59,4 @@ namespace transport_catalogue {
         std::unordered_map<std::pair<const Stop*, const Stop*>, double, PairStopHasher> distances_;
     };
 
-} 
+} // namespace transport_catalogue
