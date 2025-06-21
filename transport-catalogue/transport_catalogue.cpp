@@ -5,7 +5,7 @@
 namespace transport_catalogue {
 
     void TransportCatalogue::AddStop(std::string name, geo::Coordinates coordinates) {
-        stops_.push_back({ std::move(name), coordinates,{} });
+        stops_.push_back({ std::move(name), coordinates });
         const Stop* stop_ptr = &stops_.back();
         stopname_to_stop_[stop_ptr->name] = stop_ptr;
         stop_to_buses_[stop_ptr];
@@ -29,7 +29,6 @@ namespace transport_catalogue {
         for (const Stop* stop : bus_ptr->stops) {
             if (stop) {
                 stop_to_buses_[stop].insert(bus_ptr->name);
-                const_cast<Stop*>(stop)->buses.insert(bus_ptr->name);
             }
         }
     }
@@ -116,4 +115,4 @@ namespace transport_catalogue {
         return std::nullopt;
     }
 
-} 
+} // namespace transport_catalogue
