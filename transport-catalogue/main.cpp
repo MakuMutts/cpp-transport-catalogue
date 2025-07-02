@@ -1,32 +1,22 @@
 #include <iostream>
-#include <string>
 
-#include "input_reader.h"
-#include "stat_reader.h"
+#include "json_reader.h"
+#include "map_renderer.h"
+#include "request_handler.h"
+#include "transport_catalogue.h"
 
 using namespace std;
-
 int main() {
-    transport_catalogue::TransportCatalogue catalogue;
+    transport_catalogue::TransportCatalogue transport_catalogue;  //Создаем каталог
+    renderer::MapRenderer map_renderer;                           //Создаем рендерер
 
-    int base_request_count;
-    cin >> base_request_count >> ws;
+    json_reader::JsonReader json_reader(cin);
+    json_reader.FillDataBase(transport_catalogue);  //Заполняем транспортный каталог
 
-    {
-        input_reader::InputReader reader;
-        for (int i = 0; i < base_request_count; ++i) {
-            string line;
-            getline(cin, line);
-            reader.ParseLine(line);
-        }
-        reader.ApplyCommands(catalogue);
-    }
+    renderer::RenderSettings render_setting = json_reader.GetRenderSettings();  //Получаем настройки для рендера из json файла
+    map_renderer.SetRenderSettings(render_setting);
+    RequestHandler request_handler = RequestHandler(transport_catalogue, map_renderer);
 
-    int stat_request_count;
-    cin >> stat_request_count >> ws;
-    for (int i = 0; i < stat_request_count; ++i) {
-        string line;
-        getline(cin, line);
-        stat_reader::ParseAndPrintStat(catalogue, line, cout);
-    }
+    json_reader.Out(transport_catalogue, request_handler, cout);
+    return 0;
 }
