@@ -1,62 +1,33 @@
 #pragma once
 #include <deque>
-#include <string>
-#include <string_view>
+#include <map>
+#include <set>
 #include <unordered_map>
 #include <unordered_set>
-#include <vector>
-#include <optional>
-#include <utility>
 
-#include "geo.h"
-
+#include "domain.h"
 namespace transport_catalogue {
-
-    struct Stop {
-        std::string name;
-        geo::Coordinates coordinates;
-    };
-
-    struct Bus {
-        std::string name;
-        std::vector<const Stop*> stops;
-        bool is_roundtrip;
-    };
-
     class TransportCatalogue {
     public:
-        struct BusInfo {
-            size_t stop_count = 0;
-            size_t unique_stop_count = 0;
-            double route_length = 0.0;
-            double curvature = 1.0;
-        };
-
-        void AddStop(std::string name, geo::Coordinates coordinates);
-        void AddBus(std::string name, const std::vector<std::string_view>& stop_names, bool is_roundtrip);
-        void AddDistance(std::string_view from, std::string_view to, double distance);
-
-        const Bus* FindBus(std::string_view name) const;
-        const Stop* FindStop(std::string_view name) const;
-        double GetDistance(std::string_view from, std::string_view to) const;
-
-        std::optional<BusInfo> GetBusInfo(std::string_view bus_name) const;
-        std::optional<const std::unordered_set<std::string_view>*> GetBusesByStop(const Stop* stop) const;
+        void AddStop(const std::string& name, geo::Coordinates coordinates);
+        void AddBus(const std::string& name, const std::vector<std::string>& names_stops, domain::TypeRoute type);
+        void AddDistanceToStops(const domain::Stop* first_stop, const domain::Stop* second_stop, int distance);
+        int GetCountStopsOnRouts(const domain::Bus* bus) const;
+        const domain::Bus* GetBus(const std::string& name) const;
+        const domain::Stop* GetStop(const std::string& name) const;
+        std::set<std::string> GetBusesContainingStop(const domain::Stop* stop) const;
+        int GetRealLengthRoute(const domain::Stop* from, const domain::Stop* to) const;
+        int GetLengthRoute(const domain::Bus* bus) const;
+        double GetCurvature(const domain::Bus* bus, int real_distance) const;
+        std::vector<const domain::Bus*> GetBuses() const;
+        std::map<std::string, const domain::Stop*> GetStopsContainingAnyBus() const;
 
     private:
-        struct PairStopHasher {
-            size_t operator()(const std::pair<const Stop*, const Stop*>& stops) const {
-                return std::hash<const void*>{}(stops.first) + std::hash<const void*>{}(stops.second) * 37;
-            }
-        };
-
-        std::deque<Stop> stops_;
-        std::deque<Bus> buses_;
-
-        std::unordered_map<std::string_view, const Stop*> stopname_to_stop_;
-        std::unordered_map<std::string_view, const Bus*> busname_to_bus_;
-        std::unordered_map<const Stop*, std::unordered_set<std::string_view>> stop_to_buses_;
-        std::unordered_map<std::pair<const Stop*, const Stop*>, double, PairStopHasher> distances_;
+        std::deque<domain::Stop> stops_;
+        std::unordered_map<std::string, const domain::Stop*> names_stops_;
+        std::deque<domain::Bus> buses_;
+        std::unordered_map<std::string, const domain::Bus*> names_buses_;
+        std::unordered_map<const domain::Stop*, std::vector<const domain::Bus*>> stop_to_buses_;
+        std::unordered_map<std::pair<const domain::Stop*, const domain::Stop*>, int, domain::StopPairHasher> distance_to_stops_;
     };
-
-} // namespace transport_catalogue
+}  //namespace transport_catalogue
