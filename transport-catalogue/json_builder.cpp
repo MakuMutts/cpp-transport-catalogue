@@ -2,187 +2,155 @@
 
 namespace json {
 
-    ItemContext::ItemContext(Builder& builder) : builder_(builder) {}
+	Builder::Builder() {
+		Node* root_ptr = &root_;
+		nodes_stack_.emplace_back(root_ptr);
+	}
 
-    KeyItemContext ItemContext::Key(std::string value) {
-        builder_.Key(value);
-        KeyItemContext key_item_context(builder_);
-        return key_item_context;
-    }
+	Builder::DictKeyContext Builder::Key(std::string key) {
+		auto* top_node = nodes_stack_.back();
 
-    Builder& ItemContext::EndDict() {
-        builder_.EndDict();
-        return builder_;
-    }
+		if (top_node->IsDict() && !key_) key_ = std::move(key);
+		else throw std::logic_error("Wrong map key: " + key);
 
-    ValueDictItemContext ItemContext::Value(std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string> value) {
-        builder_.Value(value);
-        ValueDictItemContext value_item_context(builder_);
-        return value_item_context;
-    }
+		return *this;
+	}
 
-    ValueDictItemContext ItemContext::StartDict() {
-        builder_.StartDict();
-        ValueDictItemContext dict_item_context(builder_);
-        return dict_item_context;
-    }
+	Builder& Builder::Value(Node::Value value) {
+		auto* top_node = nodes_stack_.back();
 
-    ArrayItemContext ItemContext::StartArray() {
-        builder_.StartArray();
-        ArrayItemContext array_item_context(builder_);
-        return array_item_context;
-    }
+		if (top_node->IsDict()) {
+			if (!key_) throw std::logic_error("Could not Value() for dict without key");
+			auto& dict = std::get<Dict>(top_node->GetValue());
+			auto [pos, _] = dict.emplace(std::move(key_.value()), Node{});
+			key_ = std::nullopt;
+			top_node = &pos->second;
+			top_node->GetValue() = std::move(value);
+		}
+		else if (top_node->IsArray()) {
+			auto& array = std::get<Array>(top_node->GetValue());
+			array.emplace_back(GetNode(value));
+			top_node = &array.back();
+		}
+		else if (root_.IsNull()) {
+			root_.GetValue() = std::move(value);
+		}
+		else throw std::logic_error("Value() called in unknow container");
 
-    Builder& ItemContext::EndArray() {
-        builder_.EndArray();
-        return builder_;
-    }
+		return *this;
+	}
 
-    ArrayItemContext ArrayItemContext::Value(std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string> value) {
-        builder_.Value(value);
-        ArrayItemContext value_array_item_context(builder_);
-        return value_array_item_context;
-    }
+	Builder::DictItemContext Builder::StartDict() {
+		auto* top_node = nodes_stack_.back();
 
-    ArrayItemContext Builder::StartArray() {
-        if (is_empty_) {
-            root_ = (Node(Array()));
-            nodes_stack_.push_back(&root_);
-            is_empty_ = false;
-        }
-        else {
-            if (nodes_stack_.empty()) {
-                throw std::logic_error("object complite");
-            }
-            if (nodes_stack_.back()->IsArray()) {
-                Array new_node = Array();
-                const_cast<Array&>(nodes_stack_.back()->AsArray()).push_back(new_node);
-                nodes_stack_.push_back(&const_cast<Array&>(nodes_stack_.back()->AsArray()).back());
-                is_empty_ = false;
-            }
-            else if (nodes_stack_.back()->IsDict()) {
-                if (last_key_ == std::nullopt) {
-                    throw std::logic_error("Not key for value");
-                }
-                Array new_node = Array();
-                const_cast<Dict&>(nodes_stack_.back()->AsDict()).insert({ *last_key_, new_node });
-                nodes_stack_.push_back(&const_cast<Dict&>(nodes_stack_.back()->AsDict()).at(*last_key_));
-                last_key_ = std::nullopt;
-                is_empty_ = false;
-            }
-        }
-        ArrayItemContext array_item_context(*this);
-        return array_item_context;
-    }
+		if (top_node->IsDict()) {
+			if (!key_) throw std::logic_error("Could not StartDict() for dict without key");
+			auto& dict = std::get<Dict>(top_node->GetValue());
+			auto [pos, _] = dict.emplace(std::move(key_.value()), Dict());
+			key_ = std::nullopt;
+			nodes_stack_.emplace_back(&pos->second);
+		}
+		else if (top_node->IsArray()) {
+			auto& array = std::get<Array>(top_node->GetValue());
+			array.emplace_back(Dict());
+			nodes_stack_.emplace_back(&array.back());
+		}
+		else if (top_node->IsNull()) {
+			top_node->GetValue() = Dict();
+		}
+		else throw std::logic_error("Wrong prev node");
 
-    Builder& Builder::EndArray() {
-        if (nodes_stack_.empty()) {
-            throw std::logic_error("object complite");
-        }
-        if (!nodes_stack_.back()->IsArray())
-            throw std::logic_error("Its not end Array");
-        nodes_stack_.pop_back();
-        return *this;
-    }
+		return *this;
+	}
 
-    ValueDictItemContext Builder::StartDict() {
-        if (is_empty_) {
-            root_ = (Node(Dict()));
-            nodes_stack_.push_back(&root_);
-            is_empty_ = false;
-        }
-        else {
-            if (nodes_stack_.empty()) {
-                throw std::logic_error("object complite");
-            }
-            if (nodes_stack_.back()->IsArray()) {
-                Dict new_node = Dict();
-                const_cast<Array&>(nodes_stack_.back()->AsArray()).push_back(new_node);
-                nodes_stack_.push_back(&const_cast<Array&>(nodes_stack_.back()->AsArray()).back());
-                is_empty_ = false;
-            }
-            else if (nodes_stack_.back()->IsDict()) {
-                if (last_key_ == std::nullopt) {
-                    throw std::logic_error("Not key for value");
-                }
-                Dict new_node = Dict();
-                const_cast<Dict&>(nodes_stack_.back()->AsDict()).insert({ *last_key_, new_node });
-                nodes_stack_.push_back(&const_cast<Dict&>(nodes_stack_.back()->AsDict()).at(*last_key_));
-                last_key_ = std::nullopt;
-                is_empty_ = false;
-            }
-        }
-        ValueDictItemContext dict_item_context(*this);
-        return dict_item_context;
-    }
-    Builder& Builder::EndDict() {
-        if (nodes_stack_.empty()) {
-            throw std::logic_error("object complite");
-        }
-        if (!nodes_stack_.back()->IsDict())
-            throw std::logic_error("Its not end Dict");
-        nodes_stack_.pop_back();
-        return *this;
-    }
+	Builder& Builder::EndDict() {
+		auto* top_node = nodes_stack_.back();
 
-    KeyItemContext Builder::Key(std::string value) {
-        if (nodes_stack_.empty()) {
-            throw std::logic_error("object complite");
-        }
-        if (!nodes_stack_.back()->IsDict() || (last_key_ != std::nullopt)) {
-            throw std::logic_error("Invalid Key");
-        }
-        last_key_ = value;
+		if (!top_node->IsDict()) throw std::logic_error("Prev node is not a Dict");
+		nodes_stack_.pop_back();
 
-        KeyItemContext key_item_context(*this);
-        return key_item_context;
-    }
+		return *this;
+	}
 
-    Builder& Builder::Value(ValueVar value) {
-        if (is_empty_) {
-            Node new_node = std::visit([](auto val) {
-                return Node(val);
-                },
-                value);
-            root_ = new_node;
-            is_empty_ = false;
-        }
-        else {
-            if (nodes_stack_.empty()) {
-                throw std::logic_error("object complite");
-            }
-            if (nodes_stack_.back()->IsArray()) {
-                Node new_node = std::visit([](auto val) {
-                    return Node(val);
-                    },
-                    value);
-                const_cast<Array&>(nodes_stack_.back()->AsArray()).push_back(new_node);
-                is_empty_ = false;
-            }
-            else if (nodes_stack_.back()->IsDict()) {
-                if (last_key_ == std::nullopt) {
-                    throw std::logic_error("Not key for value");
-                }
-                Node new_node_value = std::visit([](auto val) {
-                    return Node(val);
-                    },
-                    value);
-                const_cast<Dict&>(nodes_stack_.back()->AsDict()).insert({ *last_key_, new_node_value });
-                last_key_ = std::nullopt;
-                is_empty_ = false;
-            }
-            else {
-                throw std::logic_error("Invalid Value");
-            }
-        }
-        return *this;
-    }
+	Builder::ArrayItemContext Builder::StartArray() {
+		auto* top_node = nodes_stack_.back();
 
-    Node Builder::Build() {
-        if ((is_empty_) || (!nodes_stack_.empty())) {
-            throw std::logic_error("Builder is empty or Array/Dict not end");
-        }
-        return root_;
-    }
+		if (top_node->IsDict()) {
+			if (!key_) throw std::logic_error("Could not StartArray() for dict without key");
+			auto& dict = std::get<Dict>(top_node->GetValue());
+			auto [pos, _] = dict.emplace(std::move(key_.value()), Array());
+			key_ = std::nullopt;
+			nodes_stack_.emplace_back(&pos->second);
+		}
+		else if (top_node->IsArray()) {
+			auto& array = std::get<Array>(top_node->GetValue());
+			array.emplace_back(Array());
+			nodes_stack_.emplace_back(&array.back());
+		}
+		else if (top_node->IsNull()) {
+			top_node->GetValue() = Array();
+		}
+		else throw std::logic_error("Wrong prev node");
 
-}  // namespace json
+		return *this;
+	}
+
+	Builder& Builder::EndArray() {
+		auto* top_node = nodes_stack_.back();
+
+		if (!top_node->IsArray()) throw std::logic_error("Prev node is not an Array");
+		nodes_stack_.pop_back();
+
+		return *this;
+	}
+
+	Node Builder::Build() {
+		if (root_.IsNull() || nodes_stack_.size() > 1) throw std::logic_error("Wrong Build()");
+		return root_;
+	}
+
+	Node Builder::GetNode(Node::Value value) {
+		if (std::holds_alternative<int>(value)) return Node(std::get<int>(value));
+		if (std::holds_alternative<double>(value)) return Node(std::get<double>(value));
+		if (std::holds_alternative<std::string>(value)) return Node(std::get<std::string>(value));
+		if (std::holds_alternative<std::nullptr_t>(value)) return Node(std::get<std::nullptr_t>(value));
+		if (std::holds_alternative<bool>(value)) return Node(std::get<bool>(value));
+		if (std::holds_alternative<Dict>(value)) return Node(std::get<Dict>(value));
+		if (std::holds_alternative<Array>(value)) return Node(std::get<Array>(value));
+		return {};
+	}
+
+	Builder::DictItemContext::DictItemContext(Builder& builder)
+		: builder_(builder)
+	{
+	}
+
+	Builder::DictKeyContext Builder::DictItemContext::Key(std::string key) {
+		return builder_.Key(key);
+	}
+
+	Builder& Builder::DictItemContext::EndDict() {
+		return builder_.EndDict();
+	}
+
+	Builder::ArrayItemContext Builder::ArrayItemContext::Value(Node::Value value) {
+		return ArrayItemContext(builder_.Value(value));
+	}
+
+	Builder::ArrayItemContext BuilderContext::StartArray()
+	{
+		return builder_.StartArray();
+	}
+
+	Builder::DictItemContext BuilderContext::StartDict() {
+		return builder_.StartDict();
+	}
+
+	Builder& Builder::ArrayItemContext::EndArray() {
+		return builder_.EndArray();
+	}
+
+	Builder::DictItemContext Builder::DictKeyContext::Value(Node::Value value) {
+		return DictItemContext(builder_.Value(value));
+	}
+}

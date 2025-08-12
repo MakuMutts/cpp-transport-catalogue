@@ -1,138 +1,107 @@
 #pragma once
-#include <algorithm>
-#include <map>
-#include <set>
-#include <vector>
 
-#include "domain.h"
-#include "geo.h"
 #include "svg.h"
+#include "geo.h"
+#include "json.h"
+#include "transport_catalogue.h"
 
+#include <sstream>
+#include <algorithm>
 
 namespace renderer {
-    struct SvgRenderSettings
-    {
-        double width = 0.0;
-        double height = 0.0;
-        double padding = 0.0;
-    };
 
-    struct LabelRenderSetting {
-        int font_size = 0;
-        svg::Point offset = svg::Point(0,0);
-    };
+	inline const double EPSILON = 1e-6;
+	bool IsZero(double value);
 
-    struct BusRenderSettings
-    {
-        double line_width = 0.0;
-        LabelRenderSetting label;
-    };
+	class SphereProjector {
+	public:
 
-    struct StopRenderSettings
-    {
-        double radius = 0.0;
-        LabelRenderSetting label;
-    };
+		template <typename PointInputIt>
+		SphereProjector(PointInputIt points_begin, PointInputIt points_end,
+			double max_width, double max_height, double padding)
+			: padding_(padding)
+		{
+			if (points_begin == points_end) {
+				return;
+			}
 
-    struct UnderlayerSettings {
-        svg::Color color;
-        double width = 0.0;
-    };
+			auto [left_it, right_it] = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) { return lhs.lng < rhs.lng; });
+			min_lon_ = left_it->lng;
+			double max_lon = right_it->lng;
 
-    struct RenderSettings {
-        SvgRenderSettings svg;
-        BusRenderSettings bus;
-        StopRenderSettings stop;
-        UnderlayerSettings underlayer;
-        std::vector<svg::Color> color_palette;
-    };
+			auto [bottom_it, top_it] = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) { return lhs.lat < rhs.lat; });
+			double min_lat = bottom_it->lat;
+			max_lat_ = top_it->lat;
 
-    struct BusColor {
-        const domain::Bus* bus;
-        const svg::Color* color;
-    };
+			std::optional<double> width_approx;
+			if (!IsZero(max_lon - min_lon_)) {
+				width_approx = (max_width - 2 * padding) / (max_lon - min_lon_);
+			}
 
-    inline const double EPSILON = 1e-6;
-    inline bool IsZero(double value) {
-        return std::abs(value) < EPSILON;
-    }
-    //Этот клас наверное можно перенести в cpp
-    class SphereProjector {
-    public:
-        template <typename PointInputIt>
-        SphereProjector(PointInputIt points_begin, PointInputIt points_end, double max_width,
-            double max_height, double padding)
-            : padding_(padding) {
-            if (points_begin == points_end) {
-                return;
-            }
+			std::optional<double> height_approx;
+			if (!IsZero(max_lat_ - min_lat)) {
+				height_approx = (max_height - 2 * padding) / (max_lat_ - min_lat);
+			}
 
-            const auto [left_it, right_it] = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) {
-                return lhs.lng < rhs.lng;
-                });
-            min_lon_ = left_it->lng;
-            const double max_lon = right_it->lng;
+			if (width_approx && height_approx) {
+				approx_ = std::min(*width_approx, *height_approx);
+			}
+			else if (width_approx) {
+				approx_ = *width_approx;
+			}
+			else if (height_approx) {
+				approx_ = *height_approx;
+			}
+		}
 
-            const auto [bottom_it, top_it] = std::minmax_element(points_begin, points_end, [](auto lhs, auto rhs) {
-                return lhs.lat < rhs.lat;
-                });
-            const double min_lat = bottom_it->lat;
-            max_lat_ = top_it->lat;
+		svg::Point operator()(geo::Coordinates coordinates) const {
+			const double x = (coordinates.lng - min_lon_) * approx_ + padding_;
+			const double y = (max_lat_ - coordinates.lat) * approx_ + padding_;
+			return { x, y };
+		}
 
-            std::optional<double> width_zoom;
-            if (!IsZero(max_lon - min_lon_)) {
-                width_zoom = (max_width - 2 * padding) / (max_lon - min_lon_);
-            }
+	private:
+		double padding_;
+		double min_lon_ = 0;
+		double max_lat_ = 0;
+		double approx_ = 0;
+	};
 
-            std::optional<double> height_zoom;
-            if (!IsZero(max_lat_ - min_lat)) {
-                height_zoom = (max_height - 2 * padding) / (max_lat_ - min_lat);
-            }
+	struct RenderSettings {
+		double width = 0.0;
+		double height = 0.0;
+		double padding = 0.0;
+		double stop_radius = 0.0;
+		double line_width = 0.0;
+		int bus_label_font_size = 0;
+		svg::Point bus_label_offset = { 0.0, 0.0 };
+		int stop_label_font_size = 0;
+		svg::Point stop_label_offset = { 0.0, 0.0 };
+		svg::Color underlayer_color = { svg::NoneColor };
+		double underlayer_width = 0.0;
+		std::vector<svg::Color> color_palette{};
+	};
 
-            if (width_zoom && height_zoom) {
-                zoom_coeff_ = std::min(*width_zoom, *height_zoom);
-            }
-            else if (width_zoom) {
-                zoom_coeff_ = *width_zoom;
-            }
-            else if (height_zoom) {
-                zoom_coeff_ = *height_zoom;
-            }
-        }
 
-        svg::Point operator()(geo::Coordinates coords) const {
-            return { (coords.lng - min_lon_) * zoom_coeff_ + padding_,
-                    (max_lat_ - coords.lat) * zoom_coeff_ + padding_ };
-        }
+	class MapRenderer {
+	public:
+		MapRenderer(const RenderSettings& render_settings)
+			: render_settings_(render_settings)
+		{
+		}
 
-    private:
-        double padding_;
-        double min_lon_ = 0;
-        double max_lat_ = 0;
-        double zoom_coeff_ = 0;
-    };
+		svg::Document RendererSVG(const std::map<std::string_view, const transport::Bus*>& buses) const;
 
-    class MapRenderer {
-    public:
-        void SetRenderSettings(const RenderSettings& render_setings) {
-            render_setings_ = render_setings;
-        };
+		const json::Node RendererPrintMap(const transport::Catalog& catalog, const json::Dict& request_map) const;
 
-        std::vector<BusColor> GetBusLineColor(std::vector<const domain::Bus*>& buses) const;  //Получение цветов автобусов
-        std::vector<svg::Polyline> GetRouteLines(const std::vector<BusColor>& sorted_by_name_buses_color,
-            const SphereProjector& sphere_projector) const;  //Получение линий маршрутов
-        std::vector<svg::Text> GetRouteNames(const std::vector<BusColor>& buses,
-            const SphereProjector& sphere_projector) const;  //Получение названия маршрута
-        std::vector<svg::Circle> GetStopSymbols(const std::map<std::string, const domain::Stop*>& stops,
-            const SphereProjector& sphere_projector) const;  //Получение символов остановок
-        std::vector<svg::Text> GetStopNames(const std::map<std::string, const domain::Stop*>& stops,
-            const SphereProjector& sphere_projector) const;  //Получение названия остановок
-        const RenderSettings& GetRenderSetings() const {
-            return render_setings_;
-        };
-    private:
-        
-        RenderSettings render_setings_;
-    };
+	private:
+		const RenderSettings render_settings_;
 
-}  // namespace renderer
+		std::vector<svg::Polyline> RendererRouteLines(const std::map<std::string_view, const transport::Bus*>& buses, const SphereProjector& sprojector) const;
+		std::vector<svg::Text> RendererBusLabel(const std::map<std::string_view, const transport::Bus*>& buses, const SphereProjector& sprojector) const;
+		std::vector<svg::Circle> RendererStopsSymbols(const std::map<std::string_view, const transport::Stop*>& stops, const SphereProjector& sprojector) const;
+		std::vector<svg::Text> RendererStopsLabels(const std::map<std::string_view, const transport::Stop*>& stops, const SphereProjector& sprojector) const;
+
+	};
+
+}
