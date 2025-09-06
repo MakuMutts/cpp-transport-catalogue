@@ -9,18 +9,30 @@ namespace renderer {
     //Выходной вектор должен быть отсортирован по именам автобусов
     std::vector<BusColor> MapRenderer::GetBusLineColor(std::vector<const domain::Bus*>& buses) const {
         std::vector<BusColor> result;
-        //sort vector by name
-        std::sort(buses.begin(), buses.end(), [](const domain::Bus* lhs, const domain::Bus* rhs) { return lhs->name < rhs->name; });
+
+        if (render_setings_.color_palette.empty()) {
+            return result;
+        }
+
+        // сортируем автобусы по имени
+        std::sort(buses.begin(), buses.end(),
+            [](const domain::Bus* lhs, const domain::Bus* rhs) {
+                return lhs->name < rhs->name;
+            });
+
         int count_buses = 0;
         for (const domain::Bus* bus : buses) {
-            int index_color = (count_buses) % render_setings_.color_palette.size();
-            if (!bus->route.empty()) {
-                ++count_buses;
+            if (bus->route.empty()) {
+                continue; // пропускаем пустые маршруты
             }
+            int index_color = count_buses % render_setings_.color_palette.size();
             result.push_back({ bus, &render_setings_.color_palette[index_color] });
+            ++count_buses;
         }
+
         return result;
     }
+
 
     //Входной вектор должен быть отсортирован по именам автобусов
     std::vector<svg::Polyline> MapRenderer::GetRouteLines(const std::vector<BusColor>& sorted_by_name_buses_color, const SphereProjector& sphere_projector) const {

@@ -11,13 +11,16 @@ namespace json_reader {
     enum class TypeRequest {
         Bus,
         Stop,
-        Map
+        Map,
+        Route
     };
 
     struct StatRequest {
         int id = 0;
         TypeRequest type = TypeRequest::Bus;
         std::string name = "";
+        std::string from = "";
+        std::string to = "";
     };
 
     class JsonReader {
@@ -28,11 +31,16 @@ namespace json_reader {
         void Out(transport_catalogue::TransportCatalogue& db, const RequestHandler& request_handler, std::ostream& output) const;
         renderer::RenderSettings GetRenderSettings() const;
 
+        const json::Node& GetStatRequests() const;
+        const json::Node& GetRoutingSettings() const;
+
+        void ParseRoutingSettings(transport_catalogue::TransportCatalogue& db) const;
     private:
         void AddStops(transport_catalogue::TransportCatalogue& db) const;
         void AddBuses(transport_catalogue::TransportCatalogue& db) const;
 
         std::vector<StatRequest> GetRequest(void) const;
         json::Document document_;
+        json::Node node = nullptr;
     };
 }  // namespace json_reader

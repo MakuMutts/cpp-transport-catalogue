@@ -22,12 +22,29 @@ namespace transport_catalogue {
         std::vector<const domain::Bus*> GetBuses() const;
         std::map<std::string, const domain::Stop*> GetStopsContainingAnyBus() const;
 
-    private:
+
+        const std::unordered_map<std::pair<const domain::Stop*, const domain::Stop*>, int, domain::StopPairHasher>& GetDistanceToStops() const;
+        const std::unordered_map<std::string, const domain::Stop*>& GetStopsIndex() const;
+        const std::unordered_map<std::string, const domain::Bus*>& GetBusesIndex() const;
+        const std::map<std::string_view, const domain::Bus*> GetSortedAllBuses() const;
+        const std::map<std::string_view, const domain::Stop*> GetSortedAllStops() const;
+        int GetDistance(const domain::Stop* from_there, const domain::Stop* there) const;
+
+        double GetBusVelocity() const;
+        int GetBusWaitTime() const;
+        void SetRoutingSettings(int bus_wait_time, double bus_velocity);
+
+
         std::deque<domain::Stop> stops_;
         std::unordered_map<std::string, const domain::Stop*> names_stops_;
         std::deque<domain::Bus> buses_;
         std::unordered_map<std::string, const domain::Bus*> names_buses_;
         std::unordered_map<const domain::Stop*, std::vector<const domain::Bus*>> stop_to_buses_;
         std::unordered_map<std::pair<const domain::Stop*, const domain::Stop*>, int, domain::StopPairHasher> distance_to_stops_;
+        int bus_wait_time_ = 0;
+        double bus_velocity_ = 0.0;
     };
+
+
+
 }  //namespace transport_catalogue

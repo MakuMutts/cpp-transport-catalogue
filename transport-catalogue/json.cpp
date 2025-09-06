@@ -135,6 +135,7 @@ namespace json {
         Node LoadNumber(std::istream& input) {
             std::string parsed_num;
 
+            // Считывает в parsed_num очередной символ из input
             auto read_char = [&parsed_num, &input] {
                 parsed_num += static_cast<char>(input.get());
                 if (!input) {
@@ -142,6 +143,7 @@ namespace json {
                 }
                 };
 
+            // Считывает одну или более цифр в parsed_num из input
             auto read_digits = [&input, read_char] {
                 if (!std::isdigit(input.peek())) {
                     throw ParsingError("A digit is expected"s);
@@ -154,19 +156,24 @@ namespace json {
             if (input.peek() == '-') {
                 read_char();
             }
+            // Парсим целую часть числа
             if (input.peek() == '0') {
                 read_char();
+                // После 0 в JSON не могут идти другие цифры
             }
             else {
                 read_digits();
             }
 
             bool is_int = true;
+            // Парсим дробную часть числа
             if (input.peek() == '.') {
                 read_char();
                 read_digits();
                 is_int = false;
             }
+
+            // Парсим экспоненциальную часть числа
             if (int ch = input.peek(); ch == 'e' || ch == 'E') {
                 read_char();
                 if (ch = input.peek(); ch == '+' || ch == '-') {
@@ -178,10 +185,13 @@ namespace json {
 
             try {
                 if (is_int) {
+                    // Сначала пробуем преобразовать строку в int
                     try {
                         return std::stoi(parsed_num);
                     }
                     catch (...) {
+                        // В случае неудачи, например, при переполнении
+                        // код ниже попробует преобразовать строку в double
                     }
                 }
                 return std::stod(parsed_num);
@@ -204,6 +214,12 @@ namespace json {
             case '"':
                 return LoadString(input);
             case 't':
+                // Атрибут [[fallthrough]] (провалиться) ничего не делает, и является
+                // подсказкой компилятору и человеку, что здесь программист явно задумывал
+                // разрешить переход к инструкции следующей ветки case, а не случайно забыл
+                // написать break, return или throw.
+                // В данном случае, встретив t или f, переходим к попытке парсинга
+                // литералов true либо false
                 [[fallthrough]];
             case 'f':
                 input.putback(c);
@@ -251,6 +267,7 @@ namespace json {
                     out << "\\n"sv;
                     break;
                 case '"':
+                    // Символы " и \ выводятся как \" или \\, соответственно
                     [[fallthrough]];
                 case '\\':
                     out.put('\\');
@@ -273,6 +290,10 @@ namespace json {
             ctx.out << "null"sv;
         }
 
+        // В специализаци шаблона PrintValue для типа bool параметр value передаётся
+        // по константной ссылке, как и в основном шаблоне.
+        // В качестве альтернативы можно использовать перегрузку:
+        // void PrintValue(bool value, const PrintContext& ctx);
         template <>
         void PrintValue<bool>(const bool& value, const PrintContext& ctx) {
             ctx.out << (value ? "true"sv : "false"sv);

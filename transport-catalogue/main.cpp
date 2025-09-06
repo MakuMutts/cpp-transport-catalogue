@@ -1,22 +1,27 @@
 #include <iostream>
-
 #include "json_reader.h"
 #include "map_renderer.h"
 #include "request_handler.h"
 #include "transport_catalogue.h"
+#include "transport_router.h"
 
 using namespace std;
 int main() {
-    transport_catalogue::TransportCatalogue transport_catalogue;  //Создаем каталог
-    renderer::MapRenderer map_renderer;                           //Создаем рендерер
+    transport_catalogue::TransportCatalogue db;
+    renderer::MapRenderer renderer;
 
-    json_reader::JsonReader json_reader(cin);
-    json_reader.FillDataBase(transport_catalogue);  //Заполняем транспортный каталог
+    json_reader::JsonReader reader(cin);
+    reader.FillDataBase(db);
+    reader.ParseRoutingSettings(db);
 
-    renderer::RenderSettings render_setting = json_reader.GetRenderSettings();  //Получаем настройки для рендера из json файла
-    map_renderer.SetRenderSettings(render_setting);
-    RequestHandler request_handler = RequestHandler(transport_catalogue, map_renderer);
+    // Инициализация маршрутизатора после загрузки всех данных
+    transport::Router router(db.GetBusWaitTime(), db.GetBusVelocity());
 
-    json_reader.Out(transport_catalogue, request_handler, cout);
+    renderer::RenderSettings render_setting = reader.GetRenderSettings();
+    router.BuildGraph(db);
+    renderer.SetRenderSettings(render_setting);
+    RequestHandler request_handler(db, renderer, router);
+    reader.Out(db, request_handler, cout);
+
     return 0;
 }

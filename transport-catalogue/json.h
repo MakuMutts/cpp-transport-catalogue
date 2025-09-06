@@ -5,7 +5,7 @@
 #include <string>
 #include <variant>
 #include <vector>
-#include <optional>
+
 namespace json {
 
     class Node;

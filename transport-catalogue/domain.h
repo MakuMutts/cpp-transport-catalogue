@@ -5,6 +5,8 @@
 #include "geo.h"
 
 namespace domain {
+    struct Stop;
+    struct Bus;
     enum class TypeRoute {
         circular,
         linear
@@ -20,8 +22,10 @@ namespace domain {
     };
     struct Bus {
         std::string name;
+        
         TypeRoute type = TypeRoute::circular;
         std::vector<const Stop*> route;
+        
     };
     struct StopPairHasher {
         size_t operator()(std::pair<const Stop*, const Stop*> stops) const {
@@ -35,4 +39,5 @@ namespace domain {
         int unique_stop_count;
     };
     typedef  const Bus* BusPtr;
+
 }  // namespace domain
