@@ -1,30 +1,38 @@
 #pragma once
+#include <string>
+#include <vector>
 
 #include "geo.h"
 
-#include <string>
-#include <unordered_map>
-#include <vector>
-#include <string_view>
-
 namespace domain {
+    enum class TypeRoute {
+        circular,
+        linear
+    };
+    struct Route {
+        std::vector<std::string> stops;
+        TypeRoute type;
+    };
 
-	struct Stop {
-		Stop(const std::string& name, const geo::Coordinates& coordinates);
-		int GetDistance(Stop* to);
-
-		std::string name;
-		geo::Coordinates coordinates;
-		std::unordered_map<std::string_view, int> stop_distances;
-	};
-
-	struct Bus {
-		Bus(const std::string& name, std::vector<Stop*> stops, bool is_circle);
-
-		std::string name;
-		std::vector<Stop*> stops;
-		bool is_circle;
-		Stop* final_stop = nullptr;
-	};
-
-}
+    struct Stop {
+        std::string name;
+        geo::Coordinates coord;
+    };
+    struct Bus {
+        std::string name;
+        TypeRoute type = TypeRoute::circular;
+        std::vector<const Stop*> route;
+    };
+    struct StopPairHasher {
+        size_t operator()(std::pair<const Stop*, const Stop*> stops) const {
+            return std::hash<const void*>()(stops.first) ^ std::hash<const void*>()(stops.second);
+        }
+    };
+    struct BusStat {
+        double curvature;
+        int route_length;
+        int stop_count;
+        int unique_stop_count;
+    };
+    typedef  const Bus* BusPtr;
+}  // namespace domain

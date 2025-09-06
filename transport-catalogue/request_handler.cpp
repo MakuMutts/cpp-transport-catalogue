@@ -1,58 +1,73 @@
 #include "request_handler.h"
 
+#include <unordered_set>
+
+struct Stop_Hasher {
+    size_t operator()(const domain::Stop* stop) const {
+        return (size_t)stop;
+    }
+};
+
+std::optional<domain::BusStat> RequestHandler::GetBusStat(const std::string& bus_name) const {
+    domain::BusStat bus_stat;
+    const domain::Bus* bus = db_.GetBus(bus_name);
+    if (bus == nullptr) {
+        return std::nullopt;
+    }
+    bus_stat.stop_count = db_.GetCountStopsOnRouts(bus);
+    std::unordered_set<const domain::Stop*, Stop_Hasher> unique_stops;
+    for (const domain::Stop* stop : bus->route) {
+        unique_stops.insert(stop);
+    }
+    bus_stat.unique_stop_count = static_cast<int>(unique_stops.size());
+    int real_distance = db_.GetLengthRoute(bus);
+    bus_stat.route_length = real_distance;
+    bus_stat.curvature = db_.GetCurvature(bus, real_distance);
+
+    return bus_stat;
+}
+
+std::set<std::string> RequestHandler::GetBusesByStop(const std::string& stop_name) const {
+    const domain::Stop* stop = db_.GetStop(stop_name);
+    return db_.GetBusesContainingStop(stop);
+}
+
+static std::vector<geo::Coordinates> GetStopCoordinates(const std::map<std::string, const domain::Stop*>& stops) {
+    std::vector<geo::Coordinates> stop_coordinates;
+    for (const auto& [name, stop] : stops) {
+        stop_coordinates.push_back(stop->coord);
+    }
+    return stop_coordinates;
+}
+
 svg::Document RequestHandler::RenderMap() const {
-	return renderer_.RendererSVG(catalog_.GetSortedAllBuses());
-}
+    std::vector<const domain::Bus*> buses = db_.GetBuses();
+    std::vector<renderer::BusColor> bus_colors = renderer_.GetBusLineColor(buses);
+    std::map<std::string, const domain::Stop*> stops_containing_bus = db_.GetStopsContainingAnyBus();
+    std::vector<geo::Coordinates> stop_coordinates = GetStopCoordinates(stops_containing_bus);
+    //Создаем проектор координат
+    renderer::SphereProjector sphere_projector(stop_coordinates.begin(), stop_coordinates.end(),
+        renderer_.GetRenderSetings().svg.width,
+        renderer_.GetRenderSetings().svg.height,
+        renderer_.GetRenderSetings().svg.padding);
+    std::vector<svg::Polyline> route_lines = renderer_.GetRouteLines(bus_colors, sphere_projector);
+    std::vector<svg::Text> route_names = renderer_.GetRouteNames(bus_colors, sphere_projector);
 
-const std::optional<graph::Router<double>::RouteInfo> RequestHandler::GetOptimalRoute(const std::string_view stop_from, const std::string_view stop_to) const {
-	return router_.FindRoute(stop_from, stop_to);
-}
+    std::vector<svg::Circle> stop_symbols = renderer_.GetStopSymbols(stops_containing_bus, sphere_projector);
+    std::vector<svg::Text> stop_names = renderer_.GetStopNames(stops_containing_bus, sphere_projector);
 
-const graph::DirectedWeightedGraph<double>& RequestHandler::GetRouterGraph() const {
-	return router_.GetGraph();
-}
-
-std::optional<transport::Route> RequestHandler::GetBusStat(const std::string_view bus_number) const {
-	transport::Route bus_stat{};
-	const transport::Bus* bus = catalog_.FindRoute(bus_number);
-
-	if (!bus) throw std::invalid_argument("bus not found");
-	if (bus->circular_route) bus_stat.stops_count = bus->stops.size();
-	else bus_stat.stops_count = bus->stops.size() * 2 - 1;
-
-	int route_length = 0;
-	double geographic_length = 0.0;
-
-	for (size_t i = 0; i < bus->stops.size() - 1; ++i) {
-		auto from = bus->stops[i];
-		auto to = bus->stops[i + 1];
-		if (bus->circular_route) {
-			route_length += catalog_.GetDistance(from, to);
-			geographic_length += geo::ComputeDistance(from->coordinates,
-				to->coordinates);
-		}
-		else {
-			route_length += catalog_.GetDistance(from, to) + catalog_.GetDistance(to, from);
-			geographic_length += geo::ComputeDistance(from->coordinates,
-				to->coordinates) * 2;
-		}
-	}
-
-	bus_stat.unique_stops_count = catalog_.UniqueStopsCount(bus_number);
-	bus_stat.route_length = route_length;
-	bus_stat.curvature = route_length / geographic_length;
-
-	return bus_stat;
-}
-
-const std::set<std::string> RequestHandler::GetBusesByStop(std::string_view stop_name) const {
-	return catalog_.FindStop(stop_name)->buses_by_stop;
-}
-
-bool RequestHandler::IsBusNumber(const std::string_view bus_number) const {
-	return catalog_.FindRoute(bus_number);
-}
-
-bool RequestHandler::IsStopName(const std::string_view stop_name) const {
-	return catalog_.FindStop(stop_name);
+    svg::Document doc;
+    for (const svg::Polyline& line : route_lines) {
+        doc.Add(line);
+    }
+   for (const svg::Text& text : route_names) {
+        doc.Add(text);
+    }
+    for (const svg::Circle& circle : stop_symbols) {
+        doc.Add(circle);
+    }
+    for (const svg::Text& stop_name : stop_names) {
+        doc.Add(stop_name);
+    }
+    return doc;
 }
