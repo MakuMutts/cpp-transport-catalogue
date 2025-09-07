@@ -384,18 +384,19 @@ namespace json_reader {
         return root.AsDict().at("routing_settings");
     }
 
-    void JsonReader::ParseRoutingSettings(transport_catalogue::TransportCatalogue& db) const {
+    transport::RoutingSettings JsonReader::ParseRoutingSettings(transport_catalogue::TransportCatalogue& db) const {
+        transport::RoutingSettings settings;
         const json::Node& root = document_.GetRoot();
 
         if (!root.IsDict() || !root.AsDict().count("routing_settings")) {
-            return;
+            return settings; // возвращаем настройки по умолчанию
         }
 
-        const json::Dict& routing_settings = root.AsDict().at("routing_settings").AsDict();
-        int bus_wait_time = routing_settings.at("bus_wait_time").AsInt();
-        double bus_velocity = routing_settings.at("bus_velocity").AsDouble();
-
-        db.SetRoutingSettings(bus_wait_time, bus_velocity);
+        const json::Dict& routing_dict = root.AsDict().at("routing_settings").AsDict();
+        settings.bus_wait_time = routing_dict.at("bus_wait_time").AsInt();
+        settings.bus_velocity = routing_dict.at("bus_velocity").AsDouble();
+        //db.SetRoutingSettings(settings.bus_wait_time, settings.bus_velocity);
+        return settings;
     }
 
 }  // namespace json_reader

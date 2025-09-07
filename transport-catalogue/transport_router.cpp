@@ -1,7 +1,10 @@
 #include "transport_router.h"
 
 namespace transport {
-
+    Router::Router(RoutingSettings settings, const transport_catalogue::TransportCatalogue& catalog)
+        : settings_(std::move(settings)) {
+        BuildGraph(catalog);
+    }
     const graph::DirectedWeightedGraph<double>& Router::BuildGraph(const transport_catalogue::TransportCatalogue& catalog) {
         const auto& all_stops = catalog.GetSortedAllStops();
         const auto& all_buses = catalog.GetSortedAllBuses();
@@ -15,7 +18,7 @@ namespace transport {
             stops_graph.AddEdge({
                 vertex_id,
                 vertex_id + 1,
-                static_cast<double>(bus_wait_time_),
+                static_cast<double>(settings_.bus_wait_time),
                 graph::EdgeType::WAIT,
                 stop_info->name,
                 0
@@ -25,7 +28,7 @@ namespace transport {
 
         // Функция для перевода расстояния в минуты
         auto CalcTime = [this](int distance) {
-            return distance / (bus_velocity_ * 1000.0 / 60.0);
+            return distance / (settings_.bus_velocity * 1000.0 / 60.0);
             };
 
         // Обрабатываем маршруты автобусов
@@ -89,5 +92,15 @@ namespace transport {
     const graph::DirectedWeightedGraph<double>& Router::GetGraph() const {
         return graph_;
     }
+    const int Router::GetBusWaitTime() const {
+        return settings_.bus_wait_time;
+    }
+
+    const double Router::GetBusVelocity() const {
+        return settings_.bus_velocity;
+    }
+    /*const Router Router::GetRouterSettings() const {
+        return { settings_.bus_wait_time, settings_.bus_velocity};
+    }*/
 
 } // namespace transport

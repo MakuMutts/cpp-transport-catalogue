@@ -34,7 +34,7 @@ namespace json_reader {
         const json::Node& GetStatRequests() const;
         const json::Node& GetRoutingSettings() const;
 
-        void ParseRoutingSettings(transport_catalogue::TransportCatalogue& db) const;
+        transport::RoutingSettings ParseRoutingSettings(transport_catalogue::TransportCatalogue& db) const;
     private:
         void AddStops(transport_catalogue::TransportCatalogue& db) const;
         void AddBuses(transport_catalogue::TransportCatalogue& db) const;

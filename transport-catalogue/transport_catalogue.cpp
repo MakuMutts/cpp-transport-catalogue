@@ -112,26 +112,14 @@ namespace transport_catalogue {
         return distance_to_stops_;
     }
 
-    const std::unordered_map<std::string, const domain::Stop*>& TransportCatalogue::GetStopsIndex() const {
-        return names_stops_;
-    }
+    
 
-    const std::unordered_map<std::string, const domain::Bus*>& TransportCatalogue::GetBusesIndex() const {
-        return names_buses_;
-    }
+    
 
-    double TransportCatalogue::GetBusVelocity() const {
-        return bus_velocity_;
-    }
-
-    int TransportCatalogue::GetBusWaitTime() const {
-        return bus_wait_time_;
-    }
-
-    void TransportCatalogue::SetRoutingSettings(int bus_wait_time, double bus_velocity) {
-        bus_wait_time_ = bus_wait_time;
-        bus_velocity_ = bus_velocity;
-    }
+    /*void TransportCatalogue::SetRoutingSettings(int bus_wait_time, double bus_velocity) {
+        settings_.bus_wait_time = bus_wait_time;
+        settings_.bus_velocity_ = bus_velocity;
+    }*/
 
     const std::map<std::string_view, const domain::Bus*> TransportCatalogue::GetSortedAllBuses() const {
         return { names_buses_.begin(), names_buses_.end() };
