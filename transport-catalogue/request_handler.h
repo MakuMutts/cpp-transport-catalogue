@@ -6,7 +6,6 @@
 #include "transport_catalogue.h"
 #include "transport_router.h"
 #include "json.h"
-
 namespace json_reader {
     struct StatRequest;
 }

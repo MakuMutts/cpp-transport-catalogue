@@ -1,21 +1,24 @@
 #include "transport_router.h"
 
 namespace transport {
+
     Router::Router(RoutingSettings settings, const transport_catalogue::TransportCatalogue& catalog)
         : settings_(std::move(settings)) {
         BuildGraph(catalog);
     }
-    const graph::DirectedWeightedGraph<double>& Router::BuildGraph(const transport_catalogue::TransportCatalogue& catalog) {
+
+    void Router::BuildGraph(const transport_catalogue::TransportCatalogue& catalog) {
         const auto& all_stops = catalog.GetSortedAllStops();
         const auto& all_buses = catalog.GetSortedAllBuses();
         graph::DirectedWeightedGraph<double> stops_graph(all_stops.size() * 2);
 
-        // Создаем вершины графа и ребра ожидания
+        // Вершины для ожидания
         graph::VertexId vertex_id = 0;
         for (const auto& [stop_name, stop_info] : all_stops) {
             stop_ids_[stop_info->name] = vertex_id;
 
-            stops_graph.AddEdge({
+            // Ребро ожидания
+            graph::EdgeId edge_id = stops_graph.AddEdge({
                 vertex_id,
                 vertex_id + 1,
                 static_cast<double>(settings_.bus_wait_time),
@@ -23,20 +26,25 @@ namespace transport {
                 stop_info->name,
                 0
                 });
+
+            edge_info_[edge_id] = RouteInfo_::WaitItem{
+                stop_info,
+                Minutes(settings_.bus_wait_time),
+                stop_info->name
+            };
+
             vertex_id += 2;
         }
 
-        // Функция для перевода расстояния в минуты
         auto CalcTime = [this](int distance) {
             return distance / (settings_.bus_velocity * 1000.0 / 60.0);
             };
 
-        // Обрабатываем маршруты автобусов
+        // Автобусные рёбра
         for (const auto& [bus_name, bus] : all_buses) {
             const auto& stops = bus->route;
             const size_t n = stops.size();
 
-            // Префиксные суммы расстояний для прямого и обратного направлений
             std::vector<int> prefix_dist(n, 0), prefix_dist_inv(n, 0);
             for (size_t i = 1; i < n; ++i) {
                 prefix_dist[i] = prefix_dist[i - 1] + catalog.GetDistance(stops[i - 1], stops[i]);
@@ -53,25 +61,43 @@ namespace transport {
                     int dist_sum_inverse = prefix_dist_inv[j] - prefix_dist_inv[i];
 
                     // Прямое направление
-                    stops_graph.AddEdge({
-                        from_id + 1,
-                        to_id,
-                        CalcTime(dist_sum),
-                        graph::EdgeType::BUS,
-                        bus->name,
-                        static_cast<int>(j - i)
-                        });
-
-                    // Обратное направление (если маршрут не кольцевой)
-                    if (bus->type != domain::TypeRoute::circular) {
-                        stops_graph.AddEdge({
-                            to_id + 1,
-                            from_id,
-                            CalcTime(dist_sum_inverse),
+                    {
+                        double time = CalcTime(dist_sum);
+                        graph::EdgeId edge_id = stops_graph.AddEdge({
+                            from_id + 1,
+                            to_id,
+                            time,
                             graph::EdgeType::BUS,
                             bus->name,
                             static_cast<int>(j - i)
                             });
+
+                        edge_info_[edge_id] = RouteInfo_::BusItem{
+                            bus,
+                            Minutes(time),
+                            j - i,
+                            bus->name
+                        };
+                    }
+
+                    // Обратное направление (если линейный маршрут)
+                    if (bus->type != domain::TypeRoute::circular) {
+                        double time = CalcTime(dist_sum_inverse);
+                        graph::EdgeId edge_id = stops_graph.AddEdge({
+                            to_id + 1,
+                            from_id,
+                            time,
+                            graph::EdgeType::BUS,
+                            bus->name,
+                            static_cast<int>(j - i)
+                            });
+
+                        edge_info_[edge_id] = RouteInfo_::BusItem{
+                            bus,
+                            Minutes(time),
+                            j - i,
+                            bus->name
+                        };
                     }
                 }
             }
@@ -79,28 +105,32 @@ namespace transport {
 
         graph_ = std::move(stops_graph);
         router_ = std::make_unique<graph::Router<double>>(graph_);
-        return graph_;
     }
 
-    const std::optional<graph::Router<double>::RouteInfo> Router::FindRoute(const std::string_view stop_from, const std::string_view stop_to) const {
+    std::optional<RouteInfo_> Router::FindRoute(std::string_view stop_from, std::string_view stop_to) const {
         if (!router_) {
             return std::nullopt;
         }
-        return router_->BuildRoute(stop_ids_.at(stop_from), stop_ids_.at(stop_to));
+        auto route_info = router_->BuildRoute(stop_ids_.at(stop_from), stop_ids_.at(stop_to));
+        if (!route_info) {
+            return std::nullopt;
+        }
+        return ConvertRouteInfo(*route_info);
     }
 
-    const graph::DirectedWeightedGraph<double>& Router::GetGraph() const {
-        return graph_;
-    }
-    const int Router::GetBusWaitTime() const {
-        return settings_.bus_wait_time;
-    }
+    RouteInfo_ Router::ConvertRouteInfo(const graph::Router<double>::RouteInfo& route_info) const {
+        RouteInfo_ result;
+        result.total_time = Minutes(route_info.weight);
 
-    const double Router::GetBusVelocity() const {
-        return settings_.bus_velocity;
+        for (auto edge_id : route_info.edges) {
+            result.edges.push_back(edge_id);
+            auto it = edge_info_.find(edge_id);
+            if (it != edge_info_.end()) {
+                result.items.push_back(it->second);
+            }
+        }
+
+        return result;
     }
-    /*const Router Router::GetRouterSettings() const {
-        return { settings_.bus_wait_time, settings_.bus_velocity};
-    }*/
 
 } // namespace transport

@@ -2,12 +2,8 @@
 #include "transport_router.h"
 #include "json_reader.h"
 #include <unordered_set>
-
-struct Stop_Hasher {
-    size_t operator()(const domain::Stop* stop) const {
-        return (size_t)stop;
-    }
-};
+#include <set>
+#include <string>
 
 std::optional<domain::BusStat> RequestHandler::GetBusStat(const std::string& bus_name) const {
     const domain::Bus* bus = db_.GetBus(bus_name);
@@ -20,14 +16,6 @@ std::optional<domain::BusStat> RequestHandler::GetBusStat(const std::string& bus
     stat.unique_stop_count = static_cast<int>(unique_stops.size());
 
     stat.route_length = db_.GetLengthRoute(bus);
-
-    // std::cerr << "Bus " << bus_name << " route length: " << stat.route_length << "\n";
-    // std::cerr << "Stops: ";
-     /*for (const auto& stop : bus->route) {
-         std::cerr << stop->name << " ";
-     }
-     std::cerr << "\n";*/
-
     stat.curvature = db_.GetCurvature(bus, stat.route_length);
 
     return stat;
@@ -79,11 +67,8 @@ svg::Document RequestHandler::RenderMap() const {
 }
 
 json::Node RequestHandler::ProcessRouteRequest(const json_reader::StatRequest& request) const {
-    //std::cout << "Processing route from " << request.from << " to " << request.to << std::endl;
-
-    const auto& route_info = router_.FindRoute(request.from, request.to);
+    auto route_info = router_.FindRoute(request.from, request.to);
     if (!route_info) {
-        //std::cout << "Route not found between " << request.from << " and " << request.to << std::endl;
         return json::Builder{}
             .StartDict()
             .Key("request_id").Value(request.id)
@@ -93,34 +78,33 @@ json::Node RequestHandler::ProcessRouteRequest(const json_reader::StatRequest& r
     }
 
     json::Array items;
-    double total_time = 0.0;
+    double total_time = route_info->total_time.count();
 
-    for (const auto& edge_id : route_info->edges) {
-        const auto& edge = router_.GetGraph().GetEdge(edge_id);
-        if (edge.type == graph::EdgeType::WAIT) {
+    for (const auto& item : route_info->items) {
+        if (std::holds_alternative<transport::RouteInfo_::WaitItem>(item)) {
+            const auto& wait = std::get<transport::RouteInfo_::WaitItem>(item);
             items.push_back(
                 json::Builder{}
                 .StartDict()
                 .Key("type").Value("Wait")
-                .Key("stop_name").Value(edge.name)
-                .Key("time").Value(edge.weight)
+                .Key("stop_name").Value(std::string(wait.stop_name))
+                .Key("time").Value(wait.time.count())
                 .EndDict()
                 .Build()
             );
-            total_time += edge.weight;
         }
-        else if (edge.type == graph::EdgeType::BUS) {
+        else {
+            const auto& bus = std::get<transport::RouteInfo_::BusItem>(item);
             items.push_back(
                 json::Builder{}
                 .StartDict()
                 .Key("type").Value("Bus")
-                .Key("bus").Value(edge.name)
-                .Key("span_count").Value(edge.span_count)
-                .Key("time").Value(edge.weight)
+                .Key("bus").Value(std::string(bus.bus_name))
+                .Key("span_count").Value(static_cast<int>(bus.span_count))
+                .Key("time").Value(bus.time.count())
                 .EndDict()
                 .Build()
             );
-            total_time += edge.weight;
         }
     }
 
